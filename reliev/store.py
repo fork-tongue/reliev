@@ -13,29 +13,36 @@ from observ import (
 T = TypeVar("T", bound=Callable)
 
 
-def mutation(fn: T) -> T:
-    @wraps(fn)
-    def inner(self, *args, **kwargs):
-        readonly_state = self.state
-        self.state = self._present
-        try:
-            current = to_raw(self.state)
-            fn(self, *args, **kwargs)
-            ops, reverse_ops = patchdiff.diff(current, self.state)
-            # If ops and reverse_ops are empty, that means
-            # that there are no actual changes to record
-            if self._strict or ops or reverse_ops:
-                if not ops and not reverse_ops:
-                    raise RuntimeError(
-                        "Calling mutation didn't result in any change to state"
-                    )
+def mutation(_fn=None, *, strict=None):
+    def decorator_mutation(fn: T) -> T:
+        @wraps(fn)
+        def inner(self, *args, **kwargs):
+            readonly_state = self.state
+            self.state = self._present
 
-                self._past.append((ops, reverse_ops))
-                self._future.clear()
-        finally:
-            self.state = readonly_state
+            try:
+                current = to_raw(self.state)
+                fn(self, *args, **kwargs)
+                ops, reverse_ops = patchdiff.diff(current, self.state)
+                # If ops and reverse_ops are empty, that means
+                # that there are no actual changes to record
+                strict_mode = strict if strict is not None else self._strict
+                if strict_mode or ops or reverse_ops:
+                    if not ops and not reverse_ops:
+                        raise RuntimeError(
+                            "Calling mutation didn't result in any change to state"
+                        )
 
-    return inner
+                    self._past.append((ops, reverse_ops))
+                    self._future.clear()
+            finally:
+                self.state = readonly_state
+
+        return inner
+
+    if _fn is None:
+        return decorator_mutation
+    return decorator_mutation(_fn)
 
 
 def computed(_fn=None, *, deep=True):
