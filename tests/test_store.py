@@ -179,3 +179,51 @@ def test_store_empty_mutation_strict_store():
     # trigger a RuntimeError
     with pytest.raises(RuntimeError):
         store.update_count(1)
+
+
+def test_mutation_strict_keyword_argument():
+    class SimpleStore(Store):
+        @mutation
+        def update_count(self, count):
+            self.state["count"] = count
+
+        @mutation(strict=False)
+        def update_count_non_strict(self, count):
+            self.state["count"] = count
+
+        @mutation(strict=True)
+        def update_count_strict(self, count):
+            self.state["count"] = count
+
+    # Create a store with strict set to True (default)
+    store = SimpleStore({"count": 1})
+    assert store.state["count"] == 1
+    assert not store.can_undo
+
+    # Update with the same number using non-strict mutation
+    # This should NOT raise an error and should NOT record a change
+    store.update_count_non_strict(1)
+    assert not store.can_undo
+
+    # Update with a different number to verify store still works
+    store.update_count(2)
+    assert store.can_undo
+    assert store.state["count"] == 2
+
+    # Now create a non-strict store
+    store2 = SimpleStore({"count": 5}, strict=False)
+    assert store2.state["count"] == 5
+    assert not store2.can_undo
+
+    # Update with the same number using strict mutation decorator
+    # This should raise an error even though the store is non-strict
+    with pytest.raises(RuntimeError):
+        store2.update_count_strict(5)
+
+    # Verify the store still works normally with default behavior
+    store2.update_count(5)
+    assert not store2.can_undo  # No change recorded in non-strict mode
+
+    store2.update_count(6)
+    assert store2.can_undo  # Change recorded
+    assert store2.state["count"] == 6
