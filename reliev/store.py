@@ -7,7 +7,6 @@ from observ import (
     reactive,
     readonly,
     shallow_reactive,
-    to_raw,
 )
 
 T = TypeVar("T", bound=Callable)
@@ -18,12 +17,20 @@ def mutation(_fn=None, *, strict=None):
         @wraps(fn)
         def inner(self, *args, **kwargs):
             readonly_state = self.state
-            self.state = self._present
+
+            def recipe(state):
+                # Set self.state to the proxied version of the state
+                # supplied by patchdiff
+                self.state = state
+                fn(self, *args, **kwargs)
 
             try:
-                current = to_raw(self.state)
-                fn(self, *args, **kwargs)
-                ops, reverse_ops = patchdiff.diff(current, self.state)
+                # Pass the writable version of the state to the produce method
+                # to be proxied and supplied to the recipe
+                _, ops, reverse_ops = patchdiff.produce(
+                    self._present, recipe=recipe, in_place=True
+                )
+
                 # If ops and reverse_ops are empty, that means
                 # that there are no actual changes to record
                 strict_mode = strict if strict is not None else self._strict
