@@ -16,13 +16,25 @@ def mutation(_fn=None, *, strict=None):
     def decorator_mutation(fn: T) -> T:
         @wraps(fn)
         def inner(self, *args, **kwargs):
+            # If we're already inside a mutation on this store, run fn directly
+            # so the outer mutation's proxy records all nested changes as a
+            # single undo entry. The outer mutation is the transactional
+            # boundary; any `strict` setting on nested mutations is ignored.
+            if getattr(self, "_in_mutation", False):
+                fn(self, *args, **kwargs)
+                return
+
             readonly_state = self.state
 
             def recipe(state):
                 # Set self.state to the proxied version of the state
                 # supplied by patchdiff
                 self.state = state
-                fn(self, *args, **kwargs)
+                self._in_mutation = True
+                try:
+                    fn(self, *args, **kwargs)
+                finally:
+                    self._in_mutation = False
 
             try:
                 # Pass the writable version of the state to the produce method
@@ -31,17 +43,15 @@ def mutation(_fn=None, *, strict=None):
                     self._present, recipe=recipe, in_place=True
                 )
 
-                # If ops and reverse_ops are empty, that means
-                # that there are no actual changes to record
-                strict_mode = strict if strict is not None else self._strict
-                if strict_mode or ops or reverse_ops:
-                    if not ops and not reverse_ops:
+                if ops or reverse_ops:
+                    self._past.append((ops, reverse_ops))
+                    self._future.clear()
+                else:
+                    strict_mode = strict if strict is not None else self._strict
+                    if strict_mode:
                         raise RuntimeError(
                             "Calling mutation didn't result in any change to state"
                         )
-
-                    self._past.append((ops, reverse_ops))
-                    self._future.clear()
             finally:
                 self.state = readonly_state
 
@@ -53,10 +63,27 @@ def mutation(_fn=None, *, strict=None):
 
 
 def computed(_fn=None, *, deep=True):
+    """Expose a method as a read-only, observ-backed reactive property.
+
+    The decorated method must take only ``self``. It is replaced by a
+    ``property`` whose getter lazily builds an observ computed expression
+    (one per instance, cached in the instance ``__dict__``) and returns
+    its current value. Assignment raises ``AttributeError``, since
+    ``property`` has no setter.
+    """
+
     def decorator_computed(fn: T) -> T:
-        fn.deep = deep
-        fn.decorator = "computed"
-        return fn
+        cache_key = f"_computed_expr_{fn.__name__}"
+
+        @wraps(fn)
+        def getter(self):
+            expr = self.__dict__.get(cache_key)
+            if expr is None:
+                expr = computed_expression(partial(fn, self), deep=deep)
+                self.__dict__[cache_key] = expr
+            return expr()
+
+        return property(getter)
 
     if _fn is None:
         return decorator_computed
@@ -82,24 +109,7 @@ class Store(Generic[S]):
         self._past = shallow_reactive([])
         self._future = shallow_reactive([])
         self.state = readonly(state)
-        self._computed_props = {}
-
-        for method_name in dir(self):
-            method = getattr(self, method_name)
-            fn = getattr(method, "__func__", None)
-            if fn and getattr(fn, "decorator", None) == "computed":
-                self._computed_props[method_name] = computed_expression(
-                    partial(fn, self), deep=fn.deep
-                )
-
-    def __getattribute__(self, name):
-        super_getattribute = super().__getattribute__
-        fn = super_getattribute("_computed_props").get(name)
-        if fn:
-            # Immediately run the computed expression in order to
-            # make it behave like a property on the Store
-            return fn()
-        return super_getattribute(name)
+        self._in_mutation = False
 
     @property
     def can_undo(self) -> bool:
