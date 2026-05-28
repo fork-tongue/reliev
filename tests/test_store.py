@@ -181,6 +181,51 @@ def test_store_empty_mutation_strict_store():
         store.update_count(1)
 
 
+def test_computed_attribute_rejects_assignment():
+    """Computed methods are exposed as property-like descriptors, so direct
+    assignment must raise rather than silently shadow the computed value."""
+    store = CustomStore(state={"count": 0})
+    with pytest.raises(AttributeError):
+        store.double = 99
+
+
+def test_computed_is_installed_as_property():
+    """@computed should produce a plain stdlib property on the class, so it
+    behaves like any other read-only attribute (and assignment raises by
+    virtue of property's built-in setter behavior)."""
+    assert isinstance(CustomStore.__dict__["double"], property)
+
+
+def test_store_nested_mutations_collapse_to_single_entry():
+    """A mutation that calls another mutation should produce one undo entry
+    covering all of the changes, not raise and not produce multiple entries."""
+
+    class NestedStore(Store):
+        @mutation
+        def inc(self):
+            self.state["n"] += 1
+
+        @mutation
+        def double_inc(self):
+            self.inc()
+            self.inc()
+
+    store = NestedStore({"n": 0})
+    store.double_inc()
+    assert store.state["n"] == 2
+    # Both inner inc() calls must collapse into a single undo entry on the
+    # outer double_inc() mutation.
+    assert len(store._past) == 1
+
+    store.undo()
+    assert store.state["n"] == 0
+    assert not store.can_undo
+    assert store.can_redo
+
+    store.redo()
+    assert store.state["n"] == 2
+
+
 def test_mutation_strict_keyword_argument():
     class SimpleStore(Store):
         @mutation
