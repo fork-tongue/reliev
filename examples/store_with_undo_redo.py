@@ -4,11 +4,12 @@ for undo/redo functionality
 """
 
 from observ import watch
-from observ.store import Store, computed, mutation
+
+from reliev import Store, computed, mutation
 
 
 class CounterStore(Store):
-    @mutation
+    @mutation(context="Bump count")
     def bump_count(self):
         """
         Bump counter by one.
@@ -17,10 +18,14 @@ class CounterStore(Store):
         state, but because this method is decorated with `mutation`
         `self.state` is replaced with the mutable `self._present`
         for the scope of this method to record any changes.
+
+        The `context` is attached to the recorded undo entry and can
+        be read back through `store.undo_context`/`store.redo_context`,
+        for instance to build user-facing undo/redo labels.
         """
         self.state["count"] += 1
 
-    @mutation
+    @mutation(context=lambda self, amount: f"Adjust count to {amount}")
     def adjust_count(self, amount):
         self.state["count"] = amount
 
@@ -56,9 +61,15 @@ if __name__ == "__main__":
     store.adjust_count(5)
     assert store.count == 5
 
+    # The context of the mutation that would be undone/redone is
+    # available for building user-facing labels such as menu items
+    assert store.undo_context == "Adjust count to 5"
+
     # Undo last change
     store.undo()
     assert store.count == 1
+    assert store.undo_context == "Bump count"
+    assert store.redo_context == "Adjust count to 5"
 
     # Redo undone change
     store.redo()
