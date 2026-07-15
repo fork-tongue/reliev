@@ -57,3 +57,12 @@ select = [
     "T20", # flake8-print
     "RUF", # ruff
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# command line tool that reports through print
+"benchmarks/compare_runs.py" = ["T201"]
+
+[tool.pytest.ini_options]
+# GC pauses during timed rounds are a major source of benchmark noise,
+# so garbage collection is disabled while benchmarks are being timed.
+addopts = "--benchmark-columns='median, mean, stddev, rounds' --benchmark-disable-gc"
