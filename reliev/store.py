@@ -17,47 +17,48 @@ class HistoryEntry(NamedTuple):
 
     ops: list
     reverse_ops: list
-    reason: Optional[Hashable]
+    context: Optional[Hashable]
 
 
-def mutation(_fn=None, *, strict=None, reason=None):
+def mutation(_fn=None, *, strict=None, context=None):
     """Mark a store method as a mutation that records an undo/redo entry.
 
-    `reason` attaches a user-defined description to the recorded history
-    entry, which can be read back through `Store.undo_reason` and
-    `Store.redo_reason` to build user-facing undo/redo labels. It can be:
+    `context` attaches a user-defined value to the recorded history
+    entry, which can be read back through `Store.undo_context` and
+    `Store.redo_context`, for instance to build user-facing undo/redo
+    labels. It can be:
 
     * any (hashable) value, stored as-is — for example a plain string, a
       translation key, or a tuple such as `("added_items", 3)`
     * a callable, invoked with the same `(self, *args, **kwargs)` as the
       mutation itself (before the mutation runs), whose return value is
-      stored as the reason
+      stored as the context
 
-    Callers can override the reason for a single call by passing the
-    reserved keyword argument `mutation_reason`, which is consumed by the
+    Callers can override the context for a single call by passing the
+    reserved keyword argument `mutation_context`, which is consumed by the
     decorator and not passed on to the mutation itself.
     """
 
     def decorator_mutation(fn: T) -> T:
         @wraps(fn)
         def inner(self, *args, **kwargs):
-            call_reason = kwargs.pop("mutation_reason", None)
+            call_context = kwargs.pop("mutation_context", None)
 
             # If we're already inside a mutation on this store, run fn directly
             # so the outer mutation's proxy records all nested changes as a
             # single undo entry. The outer mutation is the transactional
             # boundary; any `strict` setting on nested mutations is ignored,
-            # and so is any reason: the outer mutation's reason wins.
+            # and so is any context: the outer mutation's context wins.
             if getattr(self, "_in_mutation", False):
                 fn(self, *args, **kwargs)
                 return
 
-            if call_reason is not None:
-                entry_reason = call_reason
-            elif callable(reason):
-                entry_reason = reason(self, *args, **kwargs)
+            if call_context is not None:
+                entry_context = call_context
+            elif callable(context):
+                entry_context = context(self, *args, **kwargs)
             else:
-                entry_reason = reason
+                entry_context = context
 
             readonly_state = self.state
 
@@ -79,7 +80,7 @@ def mutation(_fn=None, *, strict=None, reason=None):
                 )
 
                 if ops or reverse_ops:
-                    self._past.append(HistoryEntry(ops, reverse_ops, entry_reason))
+                    self._past.append(HistoryEntry(ops, reverse_ops, entry_context))
                     self._future.clear()
                 else:
                     strict_mode = strict if strict is not None else self._strict
@@ -161,24 +162,24 @@ class Store(Generic[S]):
         return len(self._future) > 0
 
     @property
-    def undo_reason(self) -> Optional[Hashable]:
+    def undo_context(self) -> Optional[Hashable]:
         """
-        Returns the reason of the mutation that `undo()` would revert,
-        or None when there is nothing to undo (or no reason was given)
+        Returns the context of the mutation that `undo()` would revert,
+        or None when there is nothing to undo (or no context was given)
         """
         if not self._past:
             return None
-        return self._past[-1].reason
+        return self._past[-1].context
 
     @property
-    def redo_reason(self) -> Optional[Hashable]:
+    def redo_context(self) -> Optional[Hashable]:
         """
-        Returns the reason of the mutation that `redo()` would reapply,
-        or None when there is nothing to redo (or no reason was given)
+        Returns the context of the mutation that `redo()` would reapply,
+        or None when there is nothing to redo (or no context was given)
         """
         if not self._future:
             return None
-        return self._future[-1].reason
+        return self._future[-1].context
 
     def undo(self):
         """
