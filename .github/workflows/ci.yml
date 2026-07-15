@@ -42,8 +42,10 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "pyproject.toml"
-      - name: Install only ty
-        run: uv sync --only-group ty
+      - name: Install ty and the package
+        # Unlike ruff, ty needs the package's dependencies installed
+        # to resolve the observ and patchdiff imports
+        run: uv sync --no-default-groups --group ty
       - name: Typecheck
         run: uv run --no-sync ty check
 
