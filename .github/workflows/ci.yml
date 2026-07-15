@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: uv sync
       - name: Test
-        run: uv run --no-sync pytest -v --cov=reliev --cov-report=term-missing tests
+        run: uv run --no-sync pytest -v --cov=reliev --cov-report=term-missing --cov-fail-under=100 tests
 
   build:
     name: Build and test wheel
