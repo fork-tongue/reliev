@@ -21,6 +21,7 @@ Homepage = "https://github.com/fork-tongue/reliev"
 [dependency-groups]
 dev = [
     "ruff",
+    "hypothesis",
     "pre-commit",
     "pytest",
     "pytest-benchmark",
