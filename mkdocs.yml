@@ -1,0 +1,65 @@
+site_name: Reliev
+site_description: Complementary store library for observ, providing undo/redo functionality
+site_url: https://fork-tongue.github.io/reliev
+repo_url: https://github.com/fork-tongue/reliev
+repo_name: fork-tongue/reliev
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 3
+            members_order: source
+            separate_signature: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - Guide:
+      - Mutations: guide/mutations.md
+      - Undo & Redo: guide/undo-redo.md
+      - Mutation Context: guide/context.md
+      - Computed Properties: guide/computed.md
+      - Nested Mutations: guide/nested-mutations.md
+      - Reactivity: guide/reactivity.md
+  - Reference:
+      - API Reference: reference/api.md
+  - Internals:
+      - Architecture: internals/architecture.md
