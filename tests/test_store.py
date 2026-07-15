@@ -226,6 +226,115 @@ def test_store_nested_mutations_collapse_to_single_entry():
     assert store.state["n"] == 2
 
 
+def test_mutation_reason():
+    class ReasonStore(Store):
+        @mutation(reason="Increment counter")
+        def bump(self):
+            self.state["count"] += 1
+
+        @mutation(reason=lambda self, amount: ("adjusted_count", amount))
+        def adjust(self, amount):
+            self.state["count"] = amount
+
+        @mutation
+        def reset(self):
+            self.state["count"] = 0
+
+    store = ReasonStore({"count": 0})
+    assert store.undo_reason is None
+    assert store.redo_reason is None
+
+    # Static reason
+    store.bump()
+    assert store.undo_reason == "Increment counter"
+    assert store.redo_reason is None
+
+    # Callable reason receives the same arguments as the mutation
+    # and can return any (hashable) value, such as a tuple
+    store.adjust(5)
+    assert store.undo_reason == ("adjusted_count", 5)
+
+    # Mutations without a reason record None
+    store.reset()
+    assert store.undo_reason is None
+
+    # Reasons move along with undo/redo
+    store.undo()
+    assert store.undo_reason == ("adjusted_count", 5)
+    assert store.redo_reason is None
+    store.undo()
+    assert store.undo_reason == "Increment counter"
+    assert store.redo_reason == ("adjusted_count", 5)
+    store.redo()
+    assert store.undo_reason == ("adjusted_count", 5)
+    assert store.redo_reason is None
+
+    # New mutations clear the redo stack and its reasons
+    store.undo()
+    store.bump()
+    assert store.redo_reason is None
+
+
+def test_mutation_reason_call_override():
+    class ReasonStore(Store):
+        @mutation(reason="Increment counter")
+        def bump(self):
+            self.state["count"] += 1
+
+        @mutation
+        def adjust(self, amount):
+            self.state["count"] = amount
+
+    store = ReasonStore({"count": 0})
+
+    # `mutation_reason` overrides the reason from the decorator
+    # and is not passed on to the mutation itself
+    store.bump(mutation_reason="Increment counter (override)")
+    assert store.undo_reason == "Increment counter (override)"
+
+    # It also works for mutations without a decorator reason
+    store.adjust(3, mutation_reason=("adjusted_count", 3))
+    assert store.undo_reason == ("adjusted_count", 3)
+
+
+def test_mutation_reason_nested_mutations():
+    class NestedStore(Store):
+        @mutation(reason="inner")
+        def inc(self):
+            self.state["n"] += 1
+
+        @mutation(reason="outer")
+        def double_inc(self):
+            self.inc()
+            self.inc(mutation_reason="inner override")
+
+    store = NestedStore({"n": 0})
+    store.double_inc()
+    assert store.state["n"] == 2
+    # The outer mutation is the transactional boundary,
+    # so its reason wins over any nested reasons
+    assert store.undo_reason == "outer"
+
+
+def test_mutation_reason_is_reactive():
+    class ReasonStore(Store):
+        @mutation(reason="Increment counter")
+        def bump(self):
+            self.state["count"] += 1
+
+    store = ReasonStore({"count": 0})
+    watcher = watch(lambda: store.undo_reason, Mock(), sync=True)
+
+    store.bump()
+    watcher.callback.assert_called_once()
+    assert store.undo_reason == "Increment counter"
+
+    watcher.callback.reset_mock()
+    store.undo()
+    watcher.callback.assert_called_once()
+    assert store.undo_reason is None
+
+
 def test_mutation_strict_keyword_argument():
     class SimpleStore(Store):
         @mutation
