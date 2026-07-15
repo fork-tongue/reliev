@@ -1,6 +1,6 @@
 [project]
 name = "reliev"
-version = "0.1.3"
+version = "0.2.0"
 description = "Complementary store library for observ"
 authors = [
     { name = "Berend Klein Haneveld", email = "berendkleinhaneveld@gmail.com" },
