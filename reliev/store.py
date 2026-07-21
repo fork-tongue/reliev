@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, NamedTuple, cast, overload
 
 import patchdiff
 from observ import computed as computed_expression
@@ -10,12 +10,6 @@ from observ import (
     readonly,
     shallow_reactive,
 )
-
-T = TypeVar("T")
-# A mutation method: any signature, but the recorded wrapper always
-# returns None (a mutation's return value would be discarded)
-M = TypeVar("M", bound="Callable[..., None]")
-S = TypeVar("S")
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable
@@ -28,10 +22,10 @@ if TYPE_CHECKING:
     # The context attached to a history entry: any hashable value,
     # or a callable producing one (invoked with the same arguments
     # as the mutation itself)
-    Context = Hashable
-    ContextArg = Context | Callable[..., Context]
+    type Context = Hashable
+    type ContextArg = Context | Callable[..., Context]
 
-    class ComputedProperty(Protocol[T]):
+    class ComputedProperty[T](Protocol):
         """
         The read-only descriptor installed by `computed` (a plain
         stdlib `property` at runtime, typed here so attribute access
@@ -49,17 +43,20 @@ class HistoryEntry(NamedTuple):
     context: Context | None
 
 
+# The type parameter `M` is a mutation method: any signature, but the
+# recorded wrapper always returns None (a mutation's return value would
+# be discarded).
 @overload
-def mutation(_fn: M) -> M: ...
+def mutation[M: Callable[..., None]](_fn: M) -> M: ...
 
 
 @overload
-def mutation(
+def mutation[M: Callable[..., None]](
     *, strict: bool | None = None, context: ContextArg | None = None
 ) -> Callable[[M], M]: ...
 
 
-def mutation(
+def mutation[M: Callable[..., None]](
     _fn: M | None = None,
     *,
     strict: bool | None = None,
@@ -150,16 +147,16 @@ def mutation(
 
 
 @overload
-def computed(_fn: Callable[[Any], T]) -> ComputedProperty[T]: ...
+def computed[T](_fn: Callable[[Any], T]) -> ComputedProperty[T]: ...
 
 
 @overload
-def computed(
+def computed[T](
     *, deep: bool = True
 ) -> Callable[[Callable[[Any], T]], ComputedProperty[T]]: ...
 
 
-def computed(
+def computed[T](
     _fn: Callable[[Any], T] | None = None, *, deep: bool = True
 ) -> ComputedProperty[T] | Callable[[Callable[[Any], T]], ComputedProperty[T]]:
     """Expose a method as a read-only, observ-backed reactive property.
@@ -194,7 +191,7 @@ def computed(
     return decorator_computed(_fn)
 
 
-class Store(Generic[S]):
+class Store[S]:
     """
     Store that tracks mutations to state in order to enable undo/redo functionality
     """
